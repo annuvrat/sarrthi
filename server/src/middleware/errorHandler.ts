@@ -1,0 +1,32 @@
+import type { NextFunction, Request, Response } from 'express';
+import logger from '../config/logger.js';
+import { AppError } from '../utils/response.js';
+
+export const errorHandler = (err: Error & { statusCode?: number; isOperational?: boolean; code?: number; errors?: Record<string, { message: string }> }, req: Request, res: Response, next: NextFunction) => {
+  if (res.headersSent) return next(err);
+
+  const statusCode = err.statusCode || 500;
+  const message = err.isOperational ? err.message : 'Internal Server Error';
+
+  if (statusCode >= 500) {
+    logger.error({ err: err.message, stack: err.stack, path: req.path });
+  }
+
+  if (err.name === 'ValidationError' && err.errors) {
+    return res.status(400).json({
+      success: false,
+      message: Object.values(err.errors).map((e) => e.message).join(', '),
+      data: null,
+    });
+  }
+
+  if (err.code === 11000) {
+    return res.status(400).json({ success: false, message: 'Duplicate field value', data: null });
+  }
+
+  res.status(statusCode).json({ success: false, message, data: null });
+};
+
+export const notFound = (req: Request, _res: Response, next: NextFunction) => {
+  next(new AppError(`Not found: ${req.originalUrl}`, 404));
+};
